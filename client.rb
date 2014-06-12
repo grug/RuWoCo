@@ -1,7 +1,16 @@
 class Client
+    require "digest/sha1"
+    require "cgi"
+    require "json"
+    require "base64"
+    require "openssl"
+    require "net/http"
+
     attr_accessor :consumer_key, :consumer_secret, :store_url, :is_ssl
 
-        API_URL = "wc-api/v1/"
+    API_URL = "wc-api/v1/"
+    HTTP_GET = "GET"
+    HTTP_POST = "POST"
 
     def initialize(consumer_key, consumer_secret, store_url, is_ssl = true)
         if consumer_key && consumer_secret && store_url
@@ -103,11 +112,43 @@ class Client
         return make_api_call("reports/sales/top_sellers", params)
     end
 
-    def make_api_call
+    def make_api_call(endpoint, params = nil, method='GET')
+        if (params.empty?)
+            params = {}
+        end
 
+        basic_auth = nil
+
+        if (@is_ssl)
+            # TODO - work out what http lib is expecting
+            basic_auth = [@consumer_key, @consumer_secret]
+        else
+            params[:oauth_consumer_key] = @consumer_key
+            params[:oauth_nonce] = Digest::SHA1.hexdigest(Time.new.to_i)
+            params[:oauth_signature_method] = 'HMAC-256'
+            params[:oauth_timestamp] = Time.new.to_i
+            params[:oauth_signature] = generate_oauth_signature(endpoint, params, method)
+        end
+
+        if (method == HTTP_GET)
+
+        elsif (method == HTTP_POST)
+
+        else
+            raise "Unsupported HTTP operation requested"    
+        end
     end
 
     def generate_oauth_signature(endpoint, params, method)
+        base_request_uri = CGI::escape(@api_url + endpoint)
 
+        query_params = []
+        params.each { |key, value| query_params.push(CGI::escape(key) + "%3D" + CGI::escape(value)) }
+
+        query_string = "%26".join(query_params)
+
+        string_to_sign = method + "&" + base_request_uri + '&' + query_string
+
+        return Base64.strict_encode64(OpenSSL::HMAC.digest(OpenSSL::Digest.new('sha256'), @consumer_secret, string_to_sign))
     end
 end
