@@ -5,10 +5,11 @@ class Client
     require "base64"
     require "openssl"
     require "net/http"
+    require "net/https"
 
-    attr_accessor :consumer_key, :consumer_secret, :store_url, :is_ssl
+    attr_accessor :consumer_key, :consumer_secret, :api_url, :is_ssl
 
-    API_URL = "wc-api/v1/"
+    API_ENDPOINT = "wc-api/v1/"
     HTTP_GET = "GET"
     HTTP_POST = "POST"
 
@@ -16,7 +17,7 @@ class Client
         if consumer_key && consumer_secret && store_url
             @consumer_key = consumer_key
             @consumer_secret = consumer_secret
-            @store_url = store_url
+            @api_url = store_url + API_ENDPOINT
             @is_ssl = is_ssl
         elsif !consumer_key
             raise "Consumer key missing"
@@ -116,13 +117,8 @@ class Client
         if (params.empty?)
             params = {}
         end
-
-        basic_auth = nil
-
-        if (@is_ssl)
-            # TODO - work out what http lib is expecting
-            basic_auth = [@consumer_key, @consumer_secret]
-        else
+        
+        if (!@is_ssl)
             params[:oauth_consumer_key] = @consumer_key
             params[:oauth_nonce] = Digest::SHA1.hexdigest(Time.new.to_i)
             params[:oauth_signature_method] = 'HMAC-256'
@@ -131,12 +127,30 @@ class Client
         end
 
         if (method == HTTP_GET)
-
+            query = URI.encode_www_form(params)
+            uri = URI(@api_url + endpoint + '?' + query)
+            http = Net::HTTP.new(uri.host, uri.port)
+            http.use_ssl = true
+            req = Net::HTTP::Get.new(uri.request_uri)
+            req.basic_auth(@consumer_key, @consumer_secret)
+            res = http.start { |test| test.request(req) }
         elsif (method == HTTP_POST)
-
+            # TODO - make POST work
+            uri = URI.parse(@api_url)
+            http = Net::HTTP.new(uri.host, uri.port)
+            http.use_ssl = true
+            http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+            req = Net::HTTP::Post.new(endpoint)
+            req.basic_auth(@consumer_key, @consumer_secret)
+            req.add_field("Content-Type", "application/json")
+            req.body(params)
+            response = http.request(req)
+            puts response.body
         else
             raise "Unsupported HTTP operation requested"    
         end
+
+        return res.body.to_json()
     end
 
     def generate_oauth_signature(endpoint, params, method)
