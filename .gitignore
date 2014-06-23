@@ -39,3 +39,4 @@ Thumbs.db
 # Other # 
 #########
 *.swp
+example.rb # just so test scripts don't get checked in
