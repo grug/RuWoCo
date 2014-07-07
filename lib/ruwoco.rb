@@ -1,4 +1,4 @@
-class Client
+class RuWoCo
     require "digest/sha1"
     require "cgi"
     require "json"
